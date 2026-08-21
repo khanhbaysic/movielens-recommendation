@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MovieLens Recommender</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      color: #eee;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      padding: 24px 40px;
+      border-bottom: 2px solid #e94560;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header h1 { font-size: 1.8rem; color: #e94560; }
+    header span { font-size: 0.95rem; color: #888; }
+
+    .container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
+
+    /* Search box */
+    .search-box {
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 32px;
+      border: 1px solid #2a2a4a;
+    }
+
+    .search-box h2 { margin-bottom: 16px; font-size: 1.1rem; color: #aaa; }
+
+    .input-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    input[type="number"] {
+      flex: 1;
+      min-width: 160px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid #3a3a5a;
+      background: #0f0f1a;
+      color: #eee;
+      font-size: 1rem;
+    }
+
+    select {
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid #3a3a5a;
+      background: #0f0f1a;
+      color: #eee;
+      font-size: 1rem;
+    }
+
+    button {
+      padding: 12px 28px;
+      border-radius: 8px;
+      border: none;
+      background: #e94560;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover { background: #c73652; }
+    button:disabled { background: #555; cursor: not-allowed; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .tab {
+      padding: 8px 20px;
+      border-radius: 20px;
+      border: 1px solid #3a3a5a;
+      background: transparent;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: #e94560;
+      border-color: #e94560;
+      color: white;
+    }
+
+    /* Cards */
+    .section-title {
+      font-size: 1rem;
+      color: #aaa;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: #1a1a2e;
+      border-radius: 10px;
+      padding: 18px;
+      border: 1px solid #2a2a4a;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .card:hover {
+      border-color: #e94560;
+      transform: translateY(-2px);
+    }
+
+    .card .rank {
+      font-size: 0.8rem;
+      color: #e94560;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .card .title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .card .genres {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 10px;
+    }
+
+    .card .rating-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stars { color: #f5c518; font-size: 0.9rem; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .badge-predict { background: #1b4332; color: #6fcf97; }
+    .badge-actual  { background: #1a237e; color: #90caf9; }
+
+    /* Status */
+    .status {
+      text-align: center;
+      padding: 40px;
+      color: #555;
+      font-size: 1rem;
+    }
+
+    .error { color: #e94560; }
+
+    /* User info */
+    .user-info {
+      background: #1a1a2e;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      border: 1px solid #2a2a4a;
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .user-info .stat { text-align: center; }
+    .user-info .stat .val { font-size: 1.4rem; font-weight: 700; color: #e94560; }
+    .user-info .stat .lbl { font-size: 0.8rem; color: #888; margin-top: 2px; }
+
+    /* Top movies banner */
+    .top-btn {
+      display: block;
+      width: 100%;
+      margin-bottom: 24px;
+      padding: 14px;
+      background: #16213e;
+      border: 1px dashed #3a3a5a;
+      border-radius: 10px;
+      color: #aaa;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    .top-btn:hover { border-color: #e94560; color: #e94560; background: #1a1a2e; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🎬 MovieLens Recommender</h1>
+    <span>SVD · MovieLens 100K · MySQL + FastAPI</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Search -->
+  <div class="search-box">
+    <h2>🔍 Nhập User ID để xem gợi ý phim</h2>
+    <div class="input-row">
+      <input type="number" id="userId" placeholder="User ID (1 – 943)" min="1" max="943" value="1"/>
+      <select id="topN">
+        <option value="5">Top 5</option>
+        <option value="10" selected>Top 10</option>
+        <option value="20">Top 20</option>
+      </select>
+      <button id="btnRecommend" onclick="recommend()">Gợi ý phim</button>
+      <button onclick="loadHistory()" style="background:#3a3a5a;">Lịch sử</button>
+    </div>
+  </div>
+
+  <!-- Top movies shortcut -->
+  <button class="top-btn" onclick="loadTopMovies()">
+    🏆 Xem Top phim được đánh giá cao nhất (≥ 50 ratings)
+  </button>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs" style="display:none">
+    <button class="tab active" onclick="switchTab('recommend')">🎯 Gợi ý</button>
+    <button class="tab" onclick="switchTab('history')">📋 Lịch sử</button>
+    <button class="tab" onclick="switchTab('top')">🏆 Top phim</button>
+  </div>
+
+  <!-- Output -->
+  <div id="output"><div class="status">Nhập User ID và nhấn "Gợi ý phim" ✨</div></div>
+
+</div>
+
+<script>
+  const API = "http://localhost:8000";
+  let currentTab = "recommend";
+  let currentUser = null;
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll(".tab").forEach((t, i) => {
+      t.classList.toggle("active", ["recommend","history","top"][i] === tab);
+    });
+    if (tab === "recommend" && currentUser) recommend();
+    if (tab === "history")   loadHistory();
+    if (tab === "top")       loadTopMovies();
+  }
+
+  function stars(rating) {
+    const full = Math.round(rating);
+    return "★".repeat(full) + "☆".repeat(5 - full);
+  }
+
+  async function recommend() {
+    const uid  = parseInt(document.getElementById("userId").value);
+    const topN = parseInt(document.getElementById("topN").value);
+    if (!uid || uid < 1 || uid > 943) {
+      setOutput('<div class="status error">⚠️ User ID phải từ 1 đến 943</div>');
+      return;
+    }
+    currentUser = uid;
+    showTabs();
+    setOutput('<div class="status">⏳ Đang tải gợi ý...</div>');
+
+    try {
+      const res  = await fetch(`${API}/recommend/${uid}?top_n=${topN}`);
+      if (!res.ok) throw new Error("User not found");
+      const data = await res.json();
+
+      let html = `
+        <div class="user-info">
+          <div class="stat"><div class="val">${uid}</div><div class="lbl">User ID</div></div>
+          <div class="stat"><div class="val">${data.seen_movies}</div><div class="lbl">Phim đã xem</div></div>
+          <div class="stat"><div class="val">${data.top_n}</div><div class="lbl">Gợi ý</div></div>
+        </div>
+        <p class="section-title">🎯 Phim được gợi ý cho User ${uid}</p>
+        <div class="cards">
+      `;
+
+      data.recommendations.forEach((m, i) => {
+        html += `
+          <div class="card">
+            <div class="rank">#${i + 1}</div>
+            <div class="title">${m.title}</div>
+            <div class="genres">${m.genres || "N/A"}</div>
+            <div class="rating-row">
+              <span class="stars">${stars(m.predicted_rating)}</span>
+              <span class="badge badge-predict">${m.predicted_rating} ⭐ dự đoán</span>
+            </div>
+          </div>
+        `;
+      });
+
+      html += "</div>";
+      setOutput(html);
+    } catch (e) {
+      setOutput(`<div class="status error">❌ ${e.message}</div>`);
+    }
+  }
+
+  async function loadHistory() {
+    const uid = parseInt(document.getElementById("userId").value);
+    if (!uid) return;
+    currentUser = uid;
+    showTabs();
+    setOutput('<div class="status">⏳ Đang tải lịch sử...</div>');
+
+    try {
+      const res  = await fetch(`${API}/users/${uid}/history?limit=20`);
+      if (!res.ok) throw new Error("User not found");
+      const data = await res.json();
+
+      let html = `
+        <div class="user-info">
+          <div class="stat"><div class="val">${uid}</div><div class="lbl">User ID</div></div>
+          <div class="stat"><div class="val">${data.total_ratings}</div><div class="lbl">Tổng ratings</div></div>
+        </div>
+        <p class="section-title">📋 Lịch sử xem của User ${uid} (top 20 theo rating)</p>
+        <div class="cards">
+      `;
+
+      data.history.forEach((m, i) => {
+        html += `
+          <div class="card">
+            <div class="rank">#${i + 1}</div>
+            <div class="title">${m.title}</div>
+            <div class="rating-row">
+              <span class="stars">${stars(m.rating)}</span>
+              <span class="badge badge-actual">${m.rating}/5 thực tế</span>
+            </div>
+          </div>
+        `;
+      });
+
+      html += "</div>";
+      setOutput(html);
+    } catch (e) {
+      setOutput(`<div class="status error">❌ ${e.message}</div>`);
+    }
+  }
+
+  async function loadTopMovies() {
+    showTabs();
+    currentTab = "top";
+    document.querySelectorAll(".tab").forEach((t, i) => {
+      t.classList.toggle("active", i === 2);
+    });
+    setOutput('<div class="status">⏳ Đang tải...</div>');
+
+    try {
+      const res  = await fetch(`${API}/top-movies?limit=20`);
+      const data = await res.json();
+
+      let html = `
+        <p class="section-title">🏆 Top 20 phim được đánh giá cao nhất (≥ 50 ratings)</p>
+        <div class="cards">
+      `;
+
+      data.top_movies.forEach((m, i) => {
+        html += `
+          <div class="card">
+            <div class="rank">#${i + 1}</div>
+            <div class="title">${m.title}</div>
+            <div class="genres">${m.genres || "N/A"}</div>
+            <div class="rating-row">
+              <span class="stars">${stars(m.avg_rating)}</span>
+              <span class="badge badge-actual">${m.avg_rating} ⭐ (${m.num_ratings} votes)</span>
+            </div>
+          </div>
+        `;
+      });
+
+      html += "</div>";
+      setOutput(html);
+    } catch (e) {
+      setOutput(`<div class="status error">❌ ${e.message}</div>`);
+    }
+  }
+
+  function setOutput(html) {
+    document.getElementById("output").innerHTML = html;
+  }
+
+  function showTabs() {
+    document.getElementById("tabs").style.display = "flex";
+  }
+
+  // Enter key
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("userId").addEventListener("keydown", e => {
+      if (e.key === "Enter") recommend();
+    });
+  });
+</script>
+</body>
+</html>

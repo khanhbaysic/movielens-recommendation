@@ -1,0 +1,19 @@
+# Model file
+svd_model.pkl
+
+# Dataset
+ml-1m/
+ml-100k/
+ml-100k.zip
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
