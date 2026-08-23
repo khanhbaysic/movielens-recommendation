@@ -23,10 +23,10 @@ with open("svd_model.pkl", "rb") as f:
 # Load data từ MySQL
 print("Loading data from MySQL...")
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Quockhanh1234",
-    database="movielens"
+    host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD"),
+    database=os.getenv("DB_NAME", "movielens")
 )
 
 df_ratings = pd.read_sql("SELECT user_id, movie_id, rating FROM ratings", conn)

@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 ﻿import json
 import time
 import mysql.connector
@@ -5,11 +7,13 @@ from kafka import KafkaConsumer
 from collections import defaultdict
 from datetime import datetime
 
+load_dotenv()
+
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Quockhanh1234",
-    database="movielens"
+    host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD"),
+    database=os.getenv("DB_NAME", "movielens")
 )
 cursor = conn.cursor()
 

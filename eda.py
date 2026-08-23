@@ -1,15 +1,19 @@
+import os
+from dotenv import load_dotenv
 ﻿import mysql.connector
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import warnings
+
+load_dotenv()
 warnings.filterwarnings("ignore")
 
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Quockhanh1234",
-    database="movielens"
+    host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD"),
+    database=os.getenv("DB_NAME", "movielens")
 )
 
 print("=" * 50)

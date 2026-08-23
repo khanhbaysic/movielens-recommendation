@@ -1,9 +1,13 @@
+import os
+from dotenv import load_dotenv
 ﻿import mysql.connector
 import pandas as pd
 import pickle
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from surprise import SVD
+
+load_dotenv()
 
 # Load model va data khi khoi dong API
 print("Loading model...")
@@ -12,10 +16,10 @@ with open("svd_model.pkl", "rb") as f:
 
 print("Connecting to MySQL...")
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Quockhanh1234",
-    database="movielens"
+    host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD"),
+    database=os.getenv("DB_NAME", "movielens")
 )
 
 df_ratings = pd.read_sql("SELECT user_id, movie_id, rating FROM ratings", conn)

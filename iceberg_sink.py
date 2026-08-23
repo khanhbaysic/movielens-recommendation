@@ -3,7 +3,10 @@ import pyarrow as pa
 from pyiceberg.catalog.sql import SqlCatalog
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 import time
+
+load_dotenv()
 
 WAREHOUSE_PATH = os.path.abspath("iceberg_warehouse")
 
@@ -19,10 +22,10 @@ table = catalog.load_table("movielens.ratings")
 print("Iceberg table loaded!")
 
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Quockhanh1234",
-    database="movielens"
+    host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD"),
+    database=os.getenv("DB_NAME", "movielens")
 )
 
 cursor = conn.cursor()

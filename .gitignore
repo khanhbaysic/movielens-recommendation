@@ -17,3 +17,7 @@ __pycache__/
 
 # Env
 .env
+# Model + Iceberg artifacts
+*.pkl
+iceberg_warehouse/
+iceberg_catalog.db

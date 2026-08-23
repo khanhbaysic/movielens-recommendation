@@ -1,16 +1,20 @@
+import os
+from dotenv import load_dotenv
 ﻿import mysql.connector
 import pandas as pd
 from surprise import SVD, Dataset, Reader, accuracy
 from surprise.model_selection import train_test_split, cross_validate
 import pickle
 
+load_dotenv()
+
 print("Connecting to MySQL...")
 
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Quockhanh1234",
-    database="movielens"
+    host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD"),
+    database=os.getenv("DB_NAME", "movielens")
 )
 
 df = pd.read_sql("""

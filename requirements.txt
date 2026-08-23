@@ -1,0 +1,25 @@
+# Database
+mysql-connector-python
+
+# Data processing
+pandas
+matplotlib
+
+# Recommendation model
+scikit-surprise
+
+# API
+fastapi
+uvicorn
+
+# Streaming
+kafka-python
+
+# Data lake
+pyiceberg[pyiceberg-core]
+pyarrow
+sqlalchemy
+
+# AI Agent
+google-genai
+python-dotenv
