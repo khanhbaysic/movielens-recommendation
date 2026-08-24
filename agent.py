@@ -1,11 +1,13 @@
 import os
 import sys
 import json
+import time
 import mysql.connector
 import pandas as pd
 import pickle
 from dotenv import load_dotenv
 from google import genai
+from collections import defaultdict
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stdin.reconfigure(encoding="utf-8")
@@ -15,12 +17,10 @@ load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL  = "gemini-3.6-flash"
 
-# Load SVD model
 print("Loading SVD model...")
 with open("svd_model.pkl", "rb") as f:
     svd = pickle.load(f)
 
-# Load data từ MySQL
 print("Loading data from MySQL...")
 conn = mysql.connector.connect(
     host=os.getenv("DB_HOST", "localhost"),
@@ -48,7 +48,8 @@ all_movie_ids = set(df_movies["movie_id"])
 print(f"Ready! {len(df_ratings):,} ratings | {len(df_movies):,} movies\n")
 
 
-# Tools
+# ── TOOLS ─────────────────────────────────────────────────────────────────────
+
 def get_user_history(user_id: int, limit: int = 10) -> str:
     user_df = df_ratings[df_ratings["user_id"] == user_id]
     if user_df.empty:
@@ -59,6 +60,36 @@ def get_user_history(user_id: int, limit: int = 10) -> str:
     for _, row in top.iterrows():
         info = movie_info.get(row["movie_id"], {})
         lines.append(f"  - {info.get('title','?')} | {info.get('genres','?')} | {int(row['rating'])}/5 sao")
+    return "\n".join(lines)
+
+
+def get_genre_preference(user_id: int) -> str:
+    """Phan tich genre user thich nhat dua tren lich su rating."""
+    user_df = df_ratings[df_ratings["user_id"] == user_id]
+    if user_df.empty:
+        return f"Không tìm thấy user {user_id}."
+
+    genre_stats = defaultdict(lambda: {"count": 0, "total": 0})
+
+    for _, row in user_df.iterrows():
+        info   = movie_info.get(row["movie_id"], {})
+        genres = info.get("genres", "")
+        for genre in genres.split(", "):
+            genre = genre.strip()
+            if genre:
+                genre_stats[genre]["count"] += 1
+                genre_stats[genre]["total"] += row["rating"]
+
+    genre_avg = [
+        (g, d["total"] / d["count"], d["count"])
+        for g, d in genre_stats.items()
+        if d["count"] >= 3
+    ]
+    genre_avg.sort(key=lambda x: x[1], reverse=True)
+
+    lines = [f"Genre preference của user {user_id} (dựa trên {len(user_df)} ratings):"]
+    for genre, avg, count in genre_avg[:8]:
+        lines.append(f"  - {genre:<15} avg {avg:.2f}/5  ({count} phim)")
     return "\n".join(lines)
 
 
@@ -124,65 +155,96 @@ def search_movies(keyword: str) -> str:
 
 
 TOOL_MAP = {
-    "recommend" : lambda p: get_recommendations(p["user_id"], p.get("genre"), p.get("top_n", 10)),
-    "history"   : lambda p: get_user_history(p["user_id"], p.get("limit", 10)),
-    "top_movies": lambda p: get_top_movies(p.get("genre"), p.get("limit", 10)),
-    "search"    : lambda p: search_movies(p["keyword"]),
+    "get_user_history"    : lambda p: get_user_history(p["user_id"], p.get("limit", 10)),
+    "get_genre_preference": lambda p: get_genre_preference(p["user_id"]),
+    "get_recommendations" : lambda p: get_recommendations(p["user_id"], p.get("genre_filter"), p.get("top_n", 10)),
+    "get_top_movies"      : lambda p: get_top_movies(p.get("genre_filter"), p.get("limit", 10)),
+    "search_movies"       : lambda p: search_movies(p["keyword"]),
 }
 
-
-def parse_intent(query: str) -> dict:
-    """Dùng Gemini để hiểu ý định người dùng và trả về JSON."""
-    prompt = f"""
-Phân tích câu hỏi sau và trả về JSON:
-
-Câu hỏi: "{query}"
-
-Trả về JSON theo đúng format này:
-{{
-    "action": "recommend" hoặc "history" hoặc "top_movies" hoặc "search",
-    "user_id": <số nguyên hoặc null>,
-    "genre": "<tên genre bằng tiếng Anh hoặc null>",
-    "keyword": "<từ khóa tìm kiếm hoặc null>",
-    "top_n": <số nguyên, mặc định 10>,
-    "limit": <số nguyên, mặc định 10>
-}}
-
-Chỉ trả về JSON, không giải thích thêm.
+TOOLS_DESC = """
+Tools có sẵn:
+1. get_user_history(user_id, limit=10) — lịch sử phim đã xem
+2. get_genre_preference(user_id) — genre user thích nhất
+3. get_recommendations(user_id, genre_filter=null, top_n=10) — gợi ý phim SVD
+4. get_top_movies(genre_filter=null, limit=10) — top phim cộng đồng
+5. search_movies(keyword) — tìm phim theo tên
 """
-    response = client.models.generate_content(model=MODEL, contents=prompt)
-    text = response.text.strip()
 
+
+def gemini_call(prompt: str) -> str:
+    for attempt in range(3):
+        try:
+            return client.models.generate_content(model=MODEL, contents=prompt).text
+        except Exception as e:
+            if "503" in str(e) and attempt < 2:
+                print("  [Gemini bận, thử lại...]")
+                time.sleep(3)
+            else:
+                raise
+
+
+def plan_and_execute(query: str) -> str:
+    # Gemini len ke hoach: chon 1-2 tools phu hop
+    plan_prompt = f"""
+Bạn là AI tư vấn phim. Người dùng hỏi: "{query}"
+
+{TOOLS_DESC}
+
+Chọn 1-2 tools phù hợp nhất. Nếu user hỏi gợi ý phim cá nhân → gọi get_genre_preference trước, sau đó get_recommendations.
+
+Trả về JSON (chỉ JSON):
+{{
+  "reasoning": "lý do ngắn gọn",
+  "tool_calls": [
+    {{"tool": "tên_tool", "params": {{"key": value}}}}
+  ]
+}}
+"""
+    text = gemini_call(plan_prompt).strip()
     if "```" in text:
         text = text.split("```")[1].replace("json", "").strip()
 
-    return json.loads(text)
+    plan      = json.loads(text)
+    reasoning = plan.get("reasoning", "")
+    print(f"  [Kế hoạch: {reasoning}]")
 
+    # Thuc thi tung tool
+    results = []
+    for call in plan.get("tool_calls", []):
+        tool_name = call.get("tool")
+        params    = call.get("params", {})
+        if tool_name not in TOOL_MAP:
+            continue
+        print(f"  [Gọi: {tool_name}({params})]")
+        results.append(f"### {tool_name}:\n{TOOL_MAP[tool_name](params)}")
 
-def format_response(query: str, data: str) -> str:
-    """Dùng Gemini để format kết quả thành câu trả lời tự nhiên."""
-    prompt = f"""
+    if not results:
+        return "Xin lỗi, không tìm được thông tin phù hợp."
+
+    # Tong hop thanh cau tra loi tu nhien co giai thich
+    final_prompt = f"""
 Người dùng hỏi: "{query}"
 
-Dữ liệu từ hệ thống:
-{data}
+Dữ liệu:
+{chr(10).join(results)}
 
-Hãy trả lời người dùng một cách tự nhiên, ngắn gọn, thân thiện bằng tiếng Việt.
+Trả lời tự nhiên, thân thiện bằng tiếng Việt. Giải thích lý do gợi ý dựa trên dữ liệu (ví dụ: "Vì bạn thích Drama..."). Ngắn gọn, không liệt kê quá dài.
 """
-    response = client.models.generate_content(model=MODEL, contents=prompt)
-    return response.text
+    return gemini_call(final_prompt)
 
 
-# Agent loop
-print("=" * 55)
+# ── MAIN LOOP ─────────────────────────────────────────────────────────────────
+
+print("=" * 60)
 print("  MOVIELENS AI AGENT  (nhập 'quit' để thoát)")
-print("=" * 55)
+print("=" * 60)
 print("Ví dụ:")
-print("  'Gợi ý phim cho user 1'")
-print("  'Top phim Action hay nhất'")
-print("  'User 50 thích phim gì'")
+print("  'Gợi ý phim hay cho user 1'")
+print("  'User 42 thích thể loại gì?'")
+print("  'Top phim Thriller hay nhất'")
 print("  'Tìm phim có tên Star Wars'")
-print("=" * 55 + "\n")
+print("=" * 60 + "\n")
 
 while True:
     user_input = input("Bạn: ").strip()
@@ -194,17 +256,7 @@ while True:
         continue
 
     try:
-        # Bước 1: Hiểu ý định
-        intent = parse_intent(user_input)
-        print(f"  [Agent: {intent}]")
-
-        # Bước 2: Gọi tool phù hợp
-        action = intent.get("action", "top_movies")
-        data   = TOOL_MAP[action](intent)
-
-        # Bước 3: Format câu trả lời tự nhiên
-        answer = format_response(user_input, data)
+        answer = plan_and_execute(user_input)
         print(f"\nAgent: {answer}\n")
-
     except Exception as e:
         print(f"\nAgent: Xin lỗi, có lỗi xảy ra: {e}\n")
